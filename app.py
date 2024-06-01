@@ -18,6 +18,7 @@ app.secret_key = "xwkmfelhrsf3429342$%/$%&"
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///finance.db"
+app.secret_key = "wdkfqldk"
 Session(app)
 
 
@@ -149,7 +150,9 @@ def register():
         db.session.add(user)
         db.session.commit()
 
-        return redirect("/login")
+        session["user_id"] = user.id
+        flash("User successfully registered!")
+        return redirect("/")
 
     else:
         return render_template("register.html")
