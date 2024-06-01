@@ -1,7 +1,4 @@
-import os
-
-from cs50 import SQL
-from flask import Flask, flash, redirect, render_template, request, session
+from flask import Flask, flash, url_for, redirect, render_template, request, session, get_flashed_messages
 from flask_session import Session
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_sqlalchemy import SQLAlchemy
@@ -15,6 +12,7 @@ app = Flask(__name__)
 
 # Custom filter
 app.jinja_env.filters["usd"] = usd
+app.secret_key = "xwkmfelhrsf3429342$%/$%&"
 
 # Configure session to use filesystem (instead of signed cookies)
 app.config["SESSION_PERMANENT"] = False
@@ -33,7 +31,7 @@ class User(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str]
     hash: Mapped[str]
-    cash: Mapped[float]
+    cash: Mapped[float] = mapped_column(default=10000.00)
 
 with app.app_context():
     db.create_all()
@@ -85,10 +83,6 @@ def login():
         elif not request.form.get("password"):
             return apology("must provide password", 403)
 
-        # Query database for username
-        # rows = db.execute(
-        #     "SELECT * FROM users WHERE username = ?", request.form.get("username")
-        # )
         username = request.form.get("username")
         password = request.form.get("password")
         user = User.query.filter_by(username=username).first()
@@ -131,7 +125,34 @@ def quote():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     """Register user"""
-    return apology("TODO")
+
+    if request.method == "POST":
+        if not request.form.get("username"):
+            return apology("must provide username", 403)
+        
+        username = request.form.get("username")
+        user = User.query.filter_by(username=username).first()
+
+        if user is not None:
+            return apology("Username already exists")
+        elif not request.form.get("password"):
+            return apology("must provide password", 403)
+
+        # Insert into database
+        password = request.form.get("password")
+        confirm_password = request.form.get("confirm_password")
+        if password != confirm_password:
+            return apology("Passwords do not match")
+        
+        hash = generate_password_hash(password)
+        user = User(username=username, hash=hash)
+        db.session.add(user)
+        db.session.commit()
+
+        return redirect("/login")
+
+    else:
+        return render_template("register.html")
 
 
 @app.route("/sell", methods=["GET", "POST"])
