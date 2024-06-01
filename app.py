@@ -4,6 +4,9 @@ from cs50 import SQL
 from flask import Flask, flash, redirect, render_template, request, session
 from flask_session import Session
 from werkzeug.security import check_password_hash, generate_password_hash
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
 
 from helpers import apology, login_required, lookup, usd
 
@@ -16,11 +19,24 @@ app.jinja_env.filters["usd"] = usd
 # Configure session to use filesystem (instead of signed cookies)
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///finance.db"
 Session(app)
 
-# Configure CS50 Library to use SQLite database
-db = SQL("sqlite:///finance.db")
 
+class Base(DeclarativeBase):
+    pass
+
+db = SQLAlchemy(app, model_class=Base)
+
+
+class User(db.Model):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str]
+    hash: Mapped[str]
+    cash: Mapped[float]
+
+with app.app_context():
+    db.create_all()
 
 @app.after_request
 def after_request(response):
@@ -70,18 +86,21 @@ def login():
             return apology("must provide password", 403)
 
         # Query database for username
-        rows = db.execute(
-            "SELECT * FROM users WHERE username = ?", request.form.get("username")
-        )
+        # rows = db.execute(
+        #     "SELECT * FROM users WHERE username = ?", request.form.get("username")
+        # )
+        username = request.form.get("username")
+        password = request.form.get("password")
+        user = User.query.filter_by(username=username).first()
 
         # Ensure username exists and password is correct
-        if len(rows) != 1 or not check_password_hash(
-            rows[0]["hash"], request.form.get("password")
+        if user is None or not check_password_hash(
+            user.hash, password
         ):
             return apology("invalid username and/or password", 403)
 
         # Remember which user has logged in
-        session["user_id"] = rows[0]["id"]
+        session["user_id"] = user.id
 
         # Redirect user to home page
         return redirect("/")
