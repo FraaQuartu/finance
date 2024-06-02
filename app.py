@@ -6,13 +6,14 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from typing import List
 from sqlalchemy import func, text, Column, Table, ForeignKey, Integer, DateTime, Float
 from datetime import datetime
-from helpers import apology, login_required, lookup, usd
+from helpers import apology, login_required, lookup, usd, format_date
 from copy import deepcopy
 # Configure application
 app = Flask(__name__)
 
 # Custom filter
 app.jinja_env.filters["usd"] = usd
+app.jinja_env.filters["format_date"] = format_date
 app.jinja_env.globals.update(lookup=lookup)
 app.secret_key = "xwkmfelhrsf3429342$%/$%&"
 
@@ -43,6 +44,14 @@ class UserStock(db.Model):
     timestamp: Mapped[datetime] = mapped_column(default=lambda x: datetime.now())
     shares: Mapped[int]
 
+class UserAction(db.Model):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    stock_symbol: Mapped[str]
+    timestamp: Mapped[datetime] = mapped_column(default=lambda x: datetime.now())
+    shares: Mapped[int]
+    total_price: Mapped[float]
+
 with app.app_context():
     db.create_all()
 
@@ -71,8 +80,6 @@ def index():
     for stock in stocks_copy:
         price = lookup(stock.stock_symbol)["price"]
         total_stocks_price += price * stock.shares
-
-    # select = db.select(UserStock.stock_symbol, UserStock.shares)
 
     return render_template("index.html", user_stocks=stocks, cash=cash, total_stocks_price=total_stocks_price)
 
@@ -113,6 +120,11 @@ def buy():
             user_stock.shares += shares
 
         user.cash = cash - total_price
+
+        # History
+        user_action = UserAction(user_id=user_id, stock_symbol=symbol, shares=shares, total_price=total_price)
+        db.session.add(user_action)
+
         db.session.commit()
         return redirect("/")
 
@@ -124,7 +136,9 @@ def buy():
 @login_required
 def history():
     """Show history of transactions"""
-    return apology("TODO")
+    user_id = session["user_id"]
+    user_actions = UserAction.query.filter_by(user_id=user_id)
+    return render_template("history.html", user_actions=user_actions)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -244,7 +258,9 @@ def sell():
         user_stock = UserStock.query.filter_by(user_id=user_id, stock_symbol=symbol).first()
         if user_stock is None:
             return apology("Invalid symbol")
-        
+        if shares <= 0:
+            return apology("Shares must be positive integer")
+
         if user_stock.shares < shares:
             return apology("You don't have enough shares")
         elif user_stock.shares == shares:
@@ -256,6 +272,10 @@ def sell():
         # Update user.cash
         user = User.query.filter_by(id=user_id).first()
         user.cash += total_price
+
+        # History
+        user_action = UserAction(user_id=user_id, stock_symbol=symbol, shares=-shares, total_price=total_price)
+        db.session.add(user_action)
         db.session.commit()
         return redirect("/")
     else:
