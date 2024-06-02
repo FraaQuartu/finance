@@ -233,4 +233,33 @@ def register():
 @login_required
 def sell():
     """Sell shares of stock"""
-    return apology("TODO")
+    if request.method == "POST":
+        user_id = session["user_id"]
+        symbol = request.form.get("symbol")
+        shares = int(request.form.get("shares"))
+        price_per_share = lookup(symbol)["price"]
+        total_price = price_per_share * shares
+
+        # Update UserStocks
+        user_stock = UserStock.query.filter_by(user_id=user_id, stock_symbol=symbol).first()
+        if user_stock is None:
+            return apology("Invalid symbol")
+        
+        if user_stock.shares < shares:
+            return apology("You don't have enough shares")
+        elif user_stock.shares == shares:
+            db.session.delete(user_stock)
+        else:
+            # Update
+            user_stock.shares -= shares
+
+        # Update user.cash
+        user = User.query.filter_by(id=user_id).first()
+        user.cash += total_price
+        db.session.commit()
+        return redirect("/")
+    else:
+        user_id = session["user_id"]
+        select = db.select(UserStock.stock_symbol).where(UserStock.user_id == user_id)
+        stock_symbols = db.session.execute(select).scalars()
+        return render_template("sell.html", symbols=stock_symbols)
