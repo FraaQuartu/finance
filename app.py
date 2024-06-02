@@ -4,8 +4,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from typing import List
-from sqlalchemy import Column, Table, ForeignKey, Integer
-
+from sqlalchemy import text, Column, Table, ForeignKey, Integer, DateTime, Float
+from datetime import datetime
 from helpers import apology, login_required, lookup, usd
 
 # Configure application
@@ -29,28 +29,20 @@ class Base(DeclarativeBase):
 db = SQLAlchemy(app, model_class=Base)
 
 
-user_stock = Table(
-    "users_stocks",
-    Base.metadata,
-    Column("user_id", ForeignKey("user.id"), primary_key=True),
-    Column("stock_id", ForeignKey("stock.id"), primary_key=True),
-)
-
 class User(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str]
     hash: Mapped[str]
     cash: Mapped[float] = mapped_column(default=10000.00)
-    stocks: Mapped[List["Stock"]] = relationship(
-        secondary=user_stock, back_populates="users"
-    )
 
-class Stock(db.Model):
+class UserStock(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
-    symbol: Mapped[str]
-    users: Mapped[List["User"]] = relationship(
-        secondary=user_stock, back_populates="stocks"
-    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    stock_symbol: Mapped[str]
+    timestamp: Mapped[datetime] = mapped_column(default=lambda x: datetime.now())
+    shares: Mapped[int]
+    price_per_share: Mapped[float]
+    total_price: Mapped[float]
 
 
 with app.app_context():
@@ -76,7 +68,37 @@ def index():
 @login_required
 def buy():
     """Buy shares of stock"""
-    return apology("TODO")
+    if request.method == "POST":
+
+        symbol = request.form.get("symbol")
+        symbol_dict = lookup(symbol)
+        if symbol_dict is None:
+            return apology("Symbol does not exists")
+
+        shares = int(request.form.get("shares"))
+        if shares <= 0:
+            return apology("Shares must be a positive integer")
+
+        symbol = symbol_dict["symbol"]
+        price = symbol_dict["price"]
+        
+        user_id = session["user_id"]
+        user = User.query.filter_by(id=user_id).first()
+        cash = user.cash
+        total_price = price*shares
+        if cash < shares * price:
+            return apology("You cannot afford it")
+
+        # Insert
+        user_stock = UserStock(user_id=user_id, stock_symbol=symbol, shares=shares, price_per_share=price, total_price=total_price)
+        db.session.add(user_stock)
+
+        user.cash = cash - total_price
+        db.session.commit()
+        return redirect("/")
+
+    else:
+        return render_template("buy.html")
 
 
 @app.route("/history")
