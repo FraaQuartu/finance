@@ -4,15 +4,16 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from typing import List
-from sqlalchemy import text, Column, Table, ForeignKey, Integer, DateTime, Float
+from sqlalchemy import func, text, Column, Table, ForeignKey, Integer, DateTime, Float
 from datetime import datetime
 from helpers import apology, login_required, lookup, usd
-
+from copy import deepcopy
 # Configure application
 app = Flask(__name__)
 
 # Custom filter
 app.jinja_env.filters["usd"] = usd
+app.jinja_env.globals.update(lookup=lookup)
 app.secret_key = "xwkmfelhrsf3429342$%/$%&"
 
 # Configure session to use filesystem (instead of signed cookies)
@@ -41,9 +42,6 @@ class UserStock(db.Model):
     stock_symbol: Mapped[str]
     timestamp: Mapped[datetime] = mapped_column(default=lambda x: datetime.now())
     shares: Mapped[int]
-    price_per_share: Mapped[float]
-    total_price: Mapped[float]
-
 
 with app.app_context():
     db.create_all()
@@ -61,7 +59,22 @@ def after_request(response):
 @login_required
 def index():
     """Show portfolio of stocks"""
-    return apology("TODO")
+    # Query all stocks related to user
+    user_id = session["user_id"]
+    user = User.query.filter_by(id=user_id).first()
+    cash = user.cash
+
+    select = db.select(UserStock).where(UserStock.user_id == user_id)
+    stocks = db.session.execute(select).scalars()
+    stocks_copy = db.session.execute(select).scalars()
+    total_stocks_price = 0
+    for stock in stocks_copy:
+        price = lookup(stock.stock_symbol)["price"]
+        total_stocks_price += price * stock.shares
+
+    # select = db.select(UserStock.stock_symbol, UserStock.shares)
+
+    return render_template("index.html", user_stocks=stocks, cash=cash, total_stocks_price=total_stocks_price)
 
 
 @app.route("/buy", methods=["GET", "POST"])
@@ -89,9 +102,15 @@ def buy():
         if cash < shares * price:
             return apology("You cannot afford it")
 
-        # Insert
-        user_stock = UserStock(user_id=user_id, stock_symbol=symbol, shares=shares, price_per_share=price, total_price=total_price)
-        db.session.add(user_stock)
+        user_stock = UserStock.query.filter_by(user_id=user_id, stock_symbol=symbol).first()
+        if user_stock is None:
+            # If not yet bought insert
+            user_stock = UserStock(user_id=user_id, stock_symbol=symbol, shares=shares)
+            db.session.add(user_stock)
+
+        else:
+            # Else update
+            user_stock.shares += shares
 
         user.cash = cash - total_price
         db.session.commit()
