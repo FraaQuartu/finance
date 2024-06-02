@@ -1,0 +1,9 @@
+- Split in models different files
+- Delete unused imports
+- Reduce redundancy in tables (stock_symbol, by creating new table)
+- Test SQL injections
+
+Extras:
+- Allow users to change their passwords.
+- Allow users to add additional cash to their account.
+- Allow users to buy more shares or sell shares of stocks they already own via index itself
