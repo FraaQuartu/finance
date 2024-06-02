@@ -1,2 +1,6 @@
 # Automatically generated pycache
 /__pycache__/
+
+/flask_session/
+
+/instance/
