@@ -2,8 +2,9 @@ from flask import Flask, flash, url_for, redirect, render_template, request, ses
 from flask_session import Session
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from typing import List
+from sqlalchemy import Column, Table, ForeignKey, Integer
 
 from helpers import apology, login_required, lookup, usd
 
@@ -28,11 +29,29 @@ class Base(DeclarativeBase):
 db = SQLAlchemy(app, model_class=Base)
 
 
+user_stock = Table(
+    "users_stocks",
+    Base.metadata,
+    Column("user_id", ForeignKey("user.id"), primary_key=True),
+    Column("stock_id", ForeignKey("stock.id"), primary_key=True),
+)
+
 class User(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str]
     hash: Mapped[str]
     cash: Mapped[float] = mapped_column(default=10000.00)
+    stocks: Mapped[List["Stock"]] = relationship(
+        secondary=user_stock, back_populates="users"
+    )
+
+class Stock(db.Model):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str]
+    users: Mapped[List["User"]] = relationship(
+        secondary=user_stock, back_populates="stocks"
+    )
+
 
 with app.app_context():
     db.create_all()
